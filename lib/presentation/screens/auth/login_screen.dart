@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -25,6 +27,51 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   // Password visibility toggle for the password field.
   bool _obscure = true;
+  late final StreamSubscription<AuthState> _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen(
+      (event) {
+        if (event.event == AuthChangeEvent.signedIn && mounted) {
+          context.go('/home');
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _authSubscription.cancel();
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final launched = await Supabase.instance.client.auth.signInWithOAuth(
+        OAuthProvider.google,
+      );
+
+      if (!launched && mounted) {
+        setState(() =>
+            _error = 'Unable to launch Google sign-in. Please try again.');
+      }
+    } on AuthException catch (e) {
+      setState(() => _error = e.message);
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   Future<void> _signIn() async {
     // Do not attempt to sign in when either field is empty.
@@ -62,14 +109,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } else {
       context.go(AppConstants.routeSplash);
     }
-  }
-
-  @override
-  void dispose() {
-    // Dispose controllers when the widget is removed to free resources.
-    _emailCtrl.dispose();
-    _passCtrl.dispose();
-    super.dispose();
   }
 
   @override
@@ -171,6 +210,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ],
 
               const SizedBox(height: 48),
+              // Google sign-in button.
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: OutlinedButton.icon(
+                  onPressed: _loading ? null : _signInWithGoogle,
+                  icon: const Icon(Icons.login, color: Colors.white),
+                  label: _loading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text('SIGN IN WITH GOOGLE'),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.white24),
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               // Sign-in button, disabled while loading.
               SizedBox(
                 width: double.infinity,
